@@ -40,7 +40,8 @@ jobs:
           key: playwright-chromium-${{ runner.os }}
 
       - name: Install Playwright Chromium
-        run: python -m playwright install --with-deps chromium
+        continue-on-error: true   # если браузер не встал — не валим весь прогон,
+        run: python -m playwright install --with-deps chromium  # остальные источники отработают
 
       # Восстанавливаем БД дедупа из кэша (последнюю сохранённую).
       - name: Restore dedup DB

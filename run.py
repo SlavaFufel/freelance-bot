@@ -46,6 +46,9 @@ def build_pipeline(cfg, dry_run: bool) -> Pipeline:
         process_updates(token, storage, cfg.secrets.access_key, owner,
                         interval_minutes=cfg.update_interval_minutes)
         recipients = storage.active_subscribers()
+        # Владелец получает заказы ВСЕГДА, даже если сам не отправлял ключ боту.
+        if owner and owner not in recipients:
+            recipients.insert(0, owner)
         logging.info("Многопользовательский режим: получателей %d", len(recipients))
     else:
         if cfg.multi_user and not cfg.secrets.access_key:
