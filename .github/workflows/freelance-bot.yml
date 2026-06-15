@@ -1,0 +1,51 @@
+name: freelance-bot
+
+# Запуск по расписанию + вручную кнопкой. Делает один прогон (run.py --once)
+# и шлёт новые подходящие заказы в Telegram. Состояние (что уже отправлено)
+# хранится в кэше Actions, чтобы не было дублей между запусками.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # каждые 30 минут (время UTC!)
+  workflow_dispatch: {}       # ручной запуск из вкладки Actions
+
+# Не запускать два прогона одновременно.
+concurrency:
+  group: freelance-bot
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Восстанавливаем БД дедупа из кэша (последнюю сохранённую).
+      - name: Restore dedup DB
+        uses: actions/cache@v4
+        with:
+          path: freelance_bot.db
+          key: freelance-db-${{ github.run_id }}
+          restore-keys: |
+            freelance-db-
+
+      - name: Run one cycle
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          HH_USER_AGENT: ${{ secrets.HH_USER_AGENT }}
+          # На заграничном IP GitHub hh не работает — оставляем источники,
+          # которые отдаются отовсюду. Меняй список под себя.
+          ENABLED_SOURCES: "telegram_channels,freelance_ru,kadrof"
+        run: python run.py --once --log-level INFO

@@ -1,0 +1,14 @@
+# Ядро — без C-расширений, ставится под Python 3.14
+httpx>=0.27
+beautifulsoup4>=4.12
+PyYAML>=6.0
+python-dotenv>=1.0
+
+# Тесты
+pytest>=8.0
+
+# --- Опциональные зависимости (ставить вручную при необходимости) ---
+# Закрытые Telegram-каналы (вместо t.me/s/):
+#   pip install telethon
+# Profi.ru / Яндекс Услуги (headless-браузер, Фаза 3):
+#   pip install playwright && python -m playwright install chromium

@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "id": "1001",
+      "name": "Разработка сайта-лендинга на Tilda",
+      "alternate_url": "https://hh.ru/vacancy/1001",
+      "snippet": {
+        "requirement": "Опыт верстки <highlighttext>сайтов</highlighttext>, знание HTML и CSS",
+        "responsibility": "Сделать адаптивный лендинг под ключ"
+      },
+      "employer": {"name": "ООО Ромашка"},
+      "salary": {"from": 50000, "to": 90000, "currency": "RUR"},
+      "published_at": "2026-06-15T09:00:00+0300"
+    },
+    {
+      "id": "1002",
+      "name": "Грузчик на склад",
+      "alternate_url": "https://hh.ru/vacancy/1002",
+      "snippet": {"requirement": "Физическая выносливость", "responsibility": "Погрузка"},
+      "employer": {"name": "Склад-Сервис"},
+      "salary": null,
+      "published_at": "2026-06-15T08:00:00+0300"
+    }
+  ]
+}
