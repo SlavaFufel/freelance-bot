@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import logging
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from bot.config import load_config
@@ -59,6 +60,41 @@ def build_pipeline(cfg, dry_run: bool) -> Pipeline:
     return Pipeline(sources, matcher, responder, notifier, storage)
 
 
+def heartbeat(cfg, pipeline, sent: int) -> None:
+    """Раз в N минут слать владельцу 'новых заказов нет', если была тишина.
+
+    Любая реальная отправка сбрасывает таймер. Метка времени хранится в БД,
+    поэтому работает и при запуске раз в N минут отдельными процессами (cron).
+    """
+    if not cfg.heartbeat_idle:
+        return
+    owner = cfg.secrets.telegram_chat_id
+    if not owner:
+        return
+    storage = pipeline.storage
+    now = datetime.now(timezone.utc)
+
+    if sent > 0:                       # были новые заказы — таймер сбрасываем
+        storage.set_meta("last_notify", now.isoformat())
+        return
+
+    last = storage.get_meta("last_notify")
+    due = True
+    if last:
+        try:
+            elapsed = (now - datetime.fromisoformat(last)).total_seconds()
+            due = elapsed >= cfg.heartbeat_interval_minutes * 60
+        except ValueError:
+            due = True
+    if due:
+        pipeline.notifier.send_text(
+            "ℹ️ Пока новых заказов нет — бот работает, проверяю каждые "
+            f"{cfg.update_interval_minutes} мин. Сообщу, как появится.",
+            chat_ids=[owner],
+        )
+        storage.set_meta("last_notify", now.isoformat())
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Парсер фриланс-бирж с откликами")
     parser.add_argument("--once", action="store_true", help="один прогон и выход")
@@ -83,13 +119,17 @@ def main() -> None:
     pipeline = build_pipeline(cfg, dry_run=args.dry_run)
 
     if args.once:
-        pipeline.run_once()
+        stats = pipeline.run_once()
+        if not args.dry_run:
+            heartbeat(cfg, pipeline, stats.sent)
         return
 
     logging.info("Старт. Опрос каждые %d сек. Ctrl+C для остановки.", cfg.poll_interval_sec)
     try:
         while True:
-            pipeline.run_once()
+            stats = pipeline.run_once()
+            if not args.dry_run:
+                heartbeat(cfg, pipeline, stats.sent)
             time.sleep(cfg.poll_interval_sec)
     except KeyboardInterrupt:
         logging.info("Остановлено пользователем.")

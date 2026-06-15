@@ -9,6 +9,12 @@ poll_interval_sec: 300
 # .github/workflows/freelance-bot.yml. Держи их согласованными (сейчас 15 мин).
 update_interval_minutes: 15
 
+# Heartbeat: если новых заказов нет, бот раз в heartbeat_interval_minutes
+# пишет ВЛАДЕЛЬЦУ "новых заказов нет, работаю" (чтобы видеть, что бот жив).
+# Друзьям не шлётся. heartbeat_idle: false — выключить.
+heartbeat_idle: true
+heartbeat_interval_minutes: 60
+
 # Многопользовательский режим: бот обрабатывает /start и ключ доступа,
 # и рассылает заказы всем подписчикам. Ключ задаётся в .env -> ACCESS_KEY.
 # false — бот шлёт заказы только владельцу (TELEGRAM_CHAT_ID).

@@ -46,6 +46,8 @@ class Secrets:
 class Config:
     poll_interval_sec: int = 300
     update_interval_minutes: int = 15   # для текста сообщений бота (синхронь с cron в workflow)
+    heartbeat_idle: bool = True          # слать владельцу "новых заказов нет", если тишина
+    heartbeat_interval_minutes: int = 60 # как часто слать такой heartbeat
     multi_user: bool = False
     enabled_sources: list[str] = field(default_factory=list)
     sources: dict = field(default_factory=dict)
@@ -106,6 +108,8 @@ def load_config(path: str | Path | None = None) -> Config:
     return Config(
         poll_interval_sec=int(data.get("poll_interval_sec", 300)),
         update_interval_minutes=int(data.get("update_interval_minutes", 15)),
+        heartbeat_idle=bool(data.get("heartbeat_idle", True)),
+        heartbeat_interval_minutes=int(data.get("heartbeat_interval_minutes", 60)),
         multi_user=bool(data.get("multi_user", False)),
         enabled_sources=enabled,
         sources=dict(data.get("sources", {}) or {}),

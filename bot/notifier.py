@@ -86,6 +86,14 @@ class TelegramNotifier:
                 ok_any = True
         return ok_any
 
+    def send_text(self, text: str, chat_ids: list[str] | None = None) -> bool:
+        """Отправить произвольное сообщение (heartbeat и т.п.)."""
+        ok_any = False
+        for chat_id in (chat_ids or self.chat_ids):
+            if self._send_one(chat_id, text):
+                ok_any = True
+        return ok_any
+
 
 class ConsoleNotifier:
     """Для --dry-run: печатает карточку в stdout, ничего не отправляет."""
@@ -103,4 +111,8 @@ class ConsoleNotifier:
         print("\n--- промпт для Gemini ---" if self.is_prompt else "\n--- черновик отклика ---")
         print(response)
         print("=" * 70)
+        return True
+
+    def send_text(self, text: str, chat_ids: list[str] | None = None) -> bool:
+        print(f"[ℹ] {text}")
         return True

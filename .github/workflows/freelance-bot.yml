@@ -1,24 +1,30 @@
 name: freelance-bot
 
-# Запуск по расписанию + вручную кнопкой. Делает один прогон (run.py --once)
-# и шлёт новые подходящие заказы в Telegram. Состояние (что уже отправлено)
-# хранится в кэше Actions, чтобы не было дублей между запусками.
+# GitHub плохо держит частые cron-расписания (*/15 массово задерживаются/пропускаются).
+# Поэтому работаем "keep-alive циклом": один job крутится ~5.5 часа, прогоняя бота
+# каждые 15 минут, затем перезапускает сам себя. Так бот работает почти непрерывно.
+# Расписание раз в 3 часа оставлено как страховка на случай обрыва цепочки.
 
 on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: [".github/workflows/freelance-bot.yml"]
   schedule:
-    - cron: "*/15 * * * *"   # каждые 15 минут (время UTC!). GitHub для расписаний
-                              # реже ~5 мин часто задерживает/пропускает запуски.
-  workflow_dispatch: {}       # ручной запуск из вкладки Actions
+    - cron: "0 */3 * * *"   # страховочный перезапуск (UTC)
 
-# Не запускать два прогона одновременно.
+permissions:
+  actions: write    # нужно для самоперезапуска (gh workflow run)
+  contents: read
+
 concurrency:
   group: freelance-bot
-  cancel-in-progress: false
+  cancel-in-progress: false   # не убивать уже работающий цикл
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 350       # ~5.8 ч, под лимитом GitHub в 6 ч
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,7 +38,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt && pip install playwright
 
-      # Браузер для Playwright (нужен для kwork/weblancer). Кэшируем, чтобы не качать каждый раз.
       - name: Cache Playwright browser
         uses: actions/cache@v4
         with:
@@ -40,10 +45,9 @@ jobs:
           key: playwright-chromium-${{ runner.os }}
 
       - name: Install Playwright Chromium
-        continue-on-error: true   # если браузер не встал — не валим весь прогон,
-        run: python -m playwright install --with-deps chromium  # остальные источники отработают
+        continue-on-error: true
+        run: python -m playwright install --with-deps chromium
 
-      # Восстанавливаем БД дедупа из кэша (последнюю сохранённую).
       - name: Restore dedup DB
         uses: actions/cache@v4
         with:
@@ -52,13 +56,26 @@ jobs:
           restore-keys: |
             freelance-db-
 
-      - name: Run one cycle
+      - name: Run loop (~5.5h, every 15 min)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           HH_USER_AGENT: ${{ secrets.HH_USER_AGENT }}
           ACCESS_KEY: ${{ secrets.ACCESS_KEY }}
-          # hh выключен (постоянная работа + блок по IP). fl_ru/youdo/profi не включаем
-          # в облако — у них анти-бот + блок заграничных IP, их лучше гонять локально.
           ENABLED_SOURCES: "telegram_channels,freelance_ru,kadrof,kwork,weblancer"
-        run: python run.py --once --log-level INFO
+        run: |
+          END=$((SECONDS + 19800))   # 5.5 часа
+          i=0
+          while [ $SECONDS -lt $END ]; do
+            i=$((i + 1))
+            echo "::group::iteration $i"
+            python run.py --once --log-level INFO || true
+            echo "::endgroup::"
+            [ $SECONDS -lt $END ] && sleep 900   # пауза 15 минут
+          done
+
+      - name: Keep alive (re-trigger self)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run freelance-bot.yml -R ${{ github.repository }} || true
