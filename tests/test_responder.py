@@ -8,6 +8,7 @@ def make_responder() -> Responder:
         greeting="Здравствуйте!",
         portfolio_link="https://port.folio/me",
         cta="Когда удобно созвониться?",
+        output="text",
         experience={
             "landing": "Делаю лендинги.",
             "ecommerce": "Делаю магазины.",
@@ -92,3 +93,20 @@ def test_render_without_tech_has_no_dangling_blank_lines():
     r = make_responder()
     text = r.render(order("Нужен сайт", ""))
     assert "\n\n\n" not in text  # пустые строки схлопнуты
+
+
+def test_build_prompt_mode():
+    cfg = ResponderConfig(
+        output="prompt",
+        portfolio_link="https://port.folio/me",
+        profile="Я делаю сайты и Telegram-ботов на Python.",
+        experience={"bot": "Боты на aiogram.", "generic": "Веб."},
+    )
+    r = Responder(cfg)
+    assert r.is_prompt
+
+    out = r.render(order("Нужен телеграм-бот на aiogram", "приём оплаты, рассылки"))
+    assert "ОБО МНЕ" in out and "ЗАКАЗ" in out          # это промпт, а не готовый отклик
+    assert "Нужен телеграм-бот на aiogram" in out        # заголовок заказа внутри промпта
+    assert "Я делаю сайты и Telegram-ботов на Python." in out  # профиль
+    assert "https://port.folio/me" in out

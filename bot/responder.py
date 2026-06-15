@@ -82,7 +82,61 @@ class Responder:
         self._cache[category] = tmpl
         return tmpl
 
+    @property
+    def is_prompt(self) -> bool:
+        return (self.cfg.output or "prompt").lower() == "prompt"
+
     def render(self, order: Order) -> str:
+        if self.is_prompt:
+            return self.build_prompt(order)
+        return self._render_text(order)
+
+    def build_prompt(self, order: Order) -> str:
+        """Готовый промпт для Gemini: пользователь копирует его и получает отклик."""
+        category = self.detect_category(order)
+        techs = self.detect_tech(order)
+        experience = self.cfg.experience.get(category) or self.cfg.experience.get(
+            "generic", ""
+        )
+        profile = self.cfg.profile.strip() or experience
+
+        desc = (order.description or "").strip()
+        if len(desc) > 900:
+            desc = desc[:900].rstrip() + "…"
+
+        lines = [
+            "Ты — опытный фрилансер-разработчик. Напиши на русском короткий, цепляющий "
+            "отклик на фриланс-заказ ниже — такой, чтобы заказчик захотел ответить именно мне.",
+            "",
+            "ОБО МНЕ:",
+            profile,
+        ]
+        if experience and experience != profile:
+            lines.append(f"Особенно релевантно по этой задаче: {experience}")
+        if self.cfg.portfolio_link:
+            lines.append(f"Портфолио: {self.cfg.portfolio_link}")
+        if techs:
+            lines.append("Упомянутые в заказе технологии: " + ", ".join(techs))
+        lines += [
+            "",
+            f"ЗАКАЗ (источник: {order.source}):",
+            f"Заголовок: {order.title}",
+            f"Описание: {desc or '—'}",
+            f"Бюджет: {order.budget or 'не указан'}",
+            f"Ссылка: {order.url}",
+            "",
+            "КАК НАПИСАТЬ ОТКЛИК:",
+            "- Обращайся к заказчику на «вы», по делу, без воды и канцелярита.",
+            "- Покажи, что понял суть задачи; упомяни 1–2 релевантных пункта моего опыта.",
+            "- Предложи следующий шаг (короткий созвон/обсуждение) и задай 1 уточняющий "
+            "вопрос, если уместно.",
+            "- 4–7 предложений, дружелюбно и профессионально.",
+            "- Не выдумывай факты обо мне сверх указанного выше.",
+            "- В ответе верни только текст отклика, без пояснений.",
+        ]
+        return "\n".join(lines).strip()
+
+    def _render_text(self, order: Order) -> str:
         category = self.detect_category(order)
         techs = self.detect_tech(order)
 

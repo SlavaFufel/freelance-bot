@@ -20,7 +20,7 @@ def _truncate(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def format_card(order: Order, result: MatchResult, response: str) -> str:
+def format_card(order: Order, result: MatchResult, response: str, is_prompt: bool = False) -> str:
     """Карточка заказа для Telegram (HTML parse_mode)."""
     e = html.escape
     budget = order.budget or "не указан"
@@ -33,7 +33,10 @@ def format_card(order: Order, result: MatchResult, response: str) -> str:
     ]
     if desc:
         parts.append(f"\n{e(desc)}")
-    parts.append("\n📝 <b>Черновик отклика</b> (скопируй и проверь перед отправкой):")
+    if is_prompt:
+        parts.append("\n🤖 <b>Промпт для Gemini</b> (скопируй и вставь в Gemini — он напишет отклик):")
+    else:
+        parts.append("\n📝 <b>Черновик отклика</b> (скопируй и проверь перед отправкой):")
     parts.append(f"<pre>{e(response)}</pre>")
 
     text = "\n".join(parts)
@@ -41,7 +44,7 @@ def format_card(order: Order, result: MatchResult, response: str) -> str:
 
 
 class TelegramNotifier:
-    def __init__(self, token: str, chat_ids: str | list[str]):
+    def __init__(self, token: str, chat_ids: str | list[str], is_prompt: bool = False):
         if isinstance(chat_ids, str):
             chat_ids = [chat_ids]
         chat_ids = [str(c) for c in chat_ids if c]
@@ -51,6 +54,7 @@ class TelegramNotifier:
             )
         self.token = token
         self.chat_ids = chat_ids
+        self.is_prompt = is_prompt
         self.api = f"https://api.telegram.org/bot{token}/sendMessage"
 
     def _send_one(self, chat_id: str, text: str) -> bool:
@@ -75,7 +79,7 @@ class TelegramNotifier:
 
     def send(self, order: Order, result: MatchResult, response: str) -> bool:
         """Отправить карточку всем получателям. True, если дошло хотя бы одному."""
-        text = format_card(order, result, response)
+        text = format_card(order, result, response, self.is_prompt)
         ok_any = False
         for chat_id in self.chat_ids:
             if self._send_one(chat_id, text):
@@ -86,6 +90,9 @@ class TelegramNotifier:
 class ConsoleNotifier:
     """Для --dry-run: печатает карточку в stdout, ничего не отправляет."""
 
+    def __init__(self, is_prompt: bool = False):
+        self.is_prompt = is_prompt
+
     def send(self, order: Order, result: MatchResult, response: str) -> bool:
         print("=" * 70)
         print(f"[{order.source}] {order.title}  (score={result.score})")
@@ -93,7 +100,7 @@ class ConsoleNotifier:
         print(f"Бюджет: {order.budget or 'не указан'}")
         if order.description:
             print(f"\n{_truncate(order.description, DESC_LIMIT)}")
-        print("\n--- черновик отклика ---")
+        print("\n--- промпт для Gemini ---" if self.is_prompt else "\n--- черновик отклика ---")
         print(response)
         print("=" * 70)
         return True

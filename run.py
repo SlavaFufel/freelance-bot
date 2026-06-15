@@ -33,7 +33,7 @@ def build_pipeline(cfg, dry_run: bool) -> Pipeline:
     storage = Storage(ROOT / "freelance_bot.db")
 
     if dry_run:
-        notifier = ConsoleNotifier()
+        notifier = ConsoleNotifier(is_prompt=responder.is_prompt)
         return Pipeline(sources, matcher, responder, notifier, storage)
 
     token = cfg.secrets.telegram_bot_token
@@ -51,7 +51,7 @@ def build_pipeline(cfg, dry_run: bool) -> Pipeline:
             logging.warning("multi_user включён, но ACCESS_KEY не задан — шлю только владельцу")
         recipients = [owner] if owner else []
 
-    notifier = TelegramNotifier(token, recipients)
+    notifier = TelegramNotifier(token, recipients, is_prompt=responder.is_prompt)
     return Pipeline(sources, matcher, responder, notifier, storage)
 
 

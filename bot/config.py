@@ -27,6 +27,8 @@ class ResponderConfig:
     greeting: str = "Здравствуйте!"
     portfolio_link: str = ""
     cta: str = ""
+    output: str = "prompt"          # "prompt" — промпт для Gemini, "text" — готовый отклик
+    profile: str = ""               # общий профиль/стек (для промпта Gemini)
     experience: dict[str, str] = field(default_factory=dict)
 
 
@@ -78,6 +80,8 @@ def load_config(path: str | Path | None = None) -> Config:
         greeting=raw_resp.get("greeting", "Здравствуйте!"),
         portfolio_link=raw_resp.get("portfolio_link", ""),
         cta=raw_resp.get("cta", ""),
+        output=raw_resp.get("output", "prompt"),
+        profile=raw_resp.get("profile", ""),
         experience=dict(raw_resp.get("experience", {}) or {}),
     )
 
