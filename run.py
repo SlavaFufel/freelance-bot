@@ -40,22 +40,23 @@ def build_pipeline(cfg, dry_run: bool) -> Pipeline:
     token = cfg.secrets.telegram_bot_token
     owner = cfg.secrets.telegram_chat_id
 
-    if cfg.multi_user and cfg.secrets.access_key:
-        # обрабатываем входящие сообщения (/start, ключ доступа) и собираем подписчиков
-        from bot.commands import process_updates
-
-        process_updates(token, storage, cfg.secrets.access_key, owner,
-                        interval_minutes=cfg.update_interval_minutes)
+    # Получатели заказов. В multi_user — все активные подписчики + владелец.
+    # Регистрацией подписчиков занимается отдельный путь `--commands` (раз в минуту),
+    # поэтому здесь getUpdates НЕ дёргаем (иначе два потребителя → 409). Список
+    # получателей НЕ зависит от наличия ACCESS_KEY (ключ нужен лишь для регистрации).
+    if cfg.multi_user:
         recipients = storage.active_subscribers()
-        # Владелец получает заказы ВСЕГДА, даже если сам не отправлял ключ боту.
         if owner and owner not in recipients:
             recipients.insert(0, owner)
-        logging.info("Многопользовательский режим: получателей %d", len(recipients))
     else:
-        if cfg.multi_user and not cfg.secrets.access_key:
-            logging.warning("multi_user включён, но ACCESS_KEY не задан — шлю только владельцу")
         recipients = [owner] if owner else []
 
+    if not recipients:
+        logging.warning("Нет получателей (ни владельца, ни подписчиков) — карточки не отправляются")
+        return Pipeline(sources, matcher, responder,
+                        ConsoleNotifier(is_prompt=responder.is_prompt), storage)
+
+    logging.info("Получателей: %d", len(recipients))
     notifier = TelegramNotifier(token, recipients, is_prompt=responder.is_prompt)
     return Pipeline(sources, matcher, responder, notifier, storage)
 
@@ -99,6 +100,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Парсер фриланс-бирж с откликами")
     parser.add_argument("--once", action="store_true", help="один прогон и выход")
     parser.add_argument(
+        "--commands", action="store_true",
+        help="только обработать входящие сообщения (/start, ключ) — быстро, без поиска заказов",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="печатать карточки в консоль вместо отправки в Telegram",
     )
@@ -116,6 +121,23 @@ def main() -> None:
     )
 
     cfg = load_config(args.config)
+
+    # Быстрый режим: только ответить на входящие сообщения (/start, ключ).
+    # Используется в цикле часто (раз в минуту), чтобы друзья получали ответ
+    # почти сразу, не дожидаясь полного поиска заказов (раз в 15 мин).
+    if args.commands:
+        token = cfg.secrets.telegram_bot_token
+        if cfg.multi_user and cfg.secrets.access_key and token:
+            from bot.commands import process_updates
+
+            storage = Storage(ROOT / "freelance_bot.db")
+            process_updates(token, storage, cfg.secrets.access_key,
+                            cfg.secrets.telegram_chat_id,
+                            interval_minutes=cfg.update_interval_minutes)
+        else:
+            logging.info("--commands: multi_user/ACCESS_KEY не заданы — нечего обрабатывать")
+        return
+
     pipeline = build_pipeline(cfg, dry_run=args.dry_run)
 
     if args.once:

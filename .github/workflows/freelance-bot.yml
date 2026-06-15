@@ -1,9 +1,10 @@
 name: freelance-bot
 
-# GitHub плохо держит частые cron-расписания (*/15 массово задерживаются/пропускаются).
-# Поэтому работаем "keep-alive циклом": один job крутится ~5.5 часа, прогоняя бота
-# каждые 15 минут, затем перезапускает сам себя. Так бот работает почти непрерывно.
-# Расписание раз в 3 часа оставлено как страховка на случай обрыва цепочки.
+# GitHub плохо держит частые cron-расписания, поэтому работаем "keep-alive циклом":
+# один job крутится ~50 минут (команды каждую минуту, заказы раз в 15 мин), сохраняет
+# состояние в кэш и перезапускает сам себя. Короткий job = состояние фиксируется часто
+# (меньше окно потери при сбое). schedule раз в 6ч — только страховка, если цепочка
+# самоперезапуска оборвётся.
 
 on:
   workflow_dispatch: {}
@@ -11,20 +12,20 @@ on:
     branches: [main]
     paths: [".github/workflows/freelance-bot.yml"]
   schedule:
-    - cron: "0 */3 * * *"   # страховочный перезапуск (UTC)
+    - cron: "0 */6 * * *"   # редкая страховка (UTC)
 
 permissions:
-  actions: write    # нужно для самоперезапуска (gh workflow run)
+  actions: write
   contents: read
 
 concurrency:
   group: freelance-bot
-  cancel-in-progress: false   # не убивать уже работающий цикл
+  cancel-in-progress: false
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 350       # ~5.8 ч, под лимитом GitHub в 6 ч
+    timeout-minutes: 70        # цикл рассчитан на ~50 мин, запас до отмены
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,15 +49,18 @@ jobs:
         continue-on-error: true
         run: python -m playwright install --with-deps chromium
 
-      - name: Restore dedup DB
-        uses: actions/cache@v4
+      # Состояние (offset getUpdates, подписчики, seen-заказы) живёт в SQLite и
+      # переносится между job'ами через кэш. Restore и Save разнесены, чтобы Save
+      # выполнялся даже при сбое шага цикла (if: always()).
+      - name: Restore state DB
+        uses: actions/cache/restore@v4
         with:
           path: freelance_bot.db
           key: freelance-db-${{ github.run_id }}
           restore-keys: |
             freelance-db-
 
-      - name: Run loop (~5.5h, every 15 min)
+      - name: Run loop (~50 min)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -64,18 +68,33 @@ jobs:
           ACCESS_KEY: ${{ secrets.ACCESS_KEY }}
           ENABLED_SOURCES: "telegram_channels,freelance_ru,kadrof,kwork,weblancer"
         run: |
-          END=$((SECONDS + 19800))   # 5.5 часа
-          i=0
+          END=$((SECONDS + 3000))     # ~50 минут, потом self-restart
+          NEXT_ORDERS=0               # когда в следующий раз искать заказы
           while [ $SECONDS -lt $END ]; do
-            i=$((i + 1))
-            echo "::group::iteration $i"
-            python run.py --once --log-level INFO || true
-            echo "::endgroup::"
-            [ $SECONDS -lt $END ] && sleep 900   # пауза 15 минут
+            # команды (/start, ключ) — каждую минуту, чтобы отвечать почти мгновенно
+            python run.py --commands --log-level WARNING || true
+            # заказы — раз в 15 минут
+            if [ $SECONDS -ge $NEXT_ORDERS ]; then
+              echo "::group::fetch orders"
+              python run.py --once --log-level INFO || true
+              echo "::endgroup::"
+              NEXT_ORDERS=$((SECONDS + 900))
+            fi
+            sleep 60
           done
+
+      - name: Save state DB
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: freelance_bot.db
+          key: freelance-db-${{ github.run_id }}
 
       - name: Keep alive (re-trigger self)
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run freelance-bot.yml -R ${{ github.repository }} || true
+        run: |
+          if ! gh workflow run freelance-bot.yml -R "${{ github.repository }}"; then
+            echo "::warning::Не удалось перезапустить workflow — подхватит расписание (раз в 6ч)."
+          fi

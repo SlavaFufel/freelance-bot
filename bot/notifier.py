@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import html
 import logging
+import time
 
 import httpx
 
@@ -58,33 +59,42 @@ class TelegramNotifier:
         self.api = f"https://api.telegram.org/bot{token}/sendMessage"
 
     def _send_one(self, chat_id: str, text: str) -> bool:
-        try:
-            resp = httpx.post(
-                self.api,
-                data={
-                    "chat_id": chat_id,
-                    "text": text,
-                    "parse_mode": "HTML",
-                    "disable_web_page_preview": "false",
-                },
-                timeout=20.0,
-            )
-            if resp.status_code == 200 and resp.json().get("ok"):
-                return True
-            log.error("Telegram sendMessage %s failed: %s %s", chat_id, resp.status_code, resp.text)
-            return False
-        except Exception as exc:  # noqa: BLE001
-            log.error("Telegram sendMessage %s error: %s", chat_id, exc)
-            return False
+        """True — доставлено ИЛИ постоянная ошибка (повторять бессмысленно);
+        False — временный сбой (стоит повторить позже)."""
+        for attempt in range(1, 4):
+            try:
+                resp = httpx.post(
+                    self.api,
+                    data={
+                        "chat_id": chat_id,
+                        "text": text,
+                        "parse_mode": "HTML",
+                        "disable_web_page_preview": "false",
+                    },
+                    timeout=20.0,
+                )
+                data = resp.json()
+                if data.get("ok"):
+                    return True
+                code = data.get("error_code", 0)
+                if code in (400, 401, 403):   # бот заблокирован / чат недоступен — не повторять
+                    log.warning("sendMessage %s: постоянная ошибка %s — пропускаю", chat_id, code)
+                    return True
+                log.warning("sendMessage %s: временный сбой %s", chat_id, code)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("sendMessage %s: ошибка %s", chat_id, exc)
+            if attempt < 3:
+                time.sleep(1.5 * attempt)
+        return False
 
     def send(self, order: Order, result: MatchResult, response: str) -> bool:
-        """Отправить карточку всем получателям. True, если дошло хотя бы одному."""
+        """Отправить карточку всем получателям. True — только если дошло ВСЕМ
+        (или у получателя постоянная ошибка). Иначе заказ не помечается seen и
+        будет повторён в следующем цикле — чтобы никто не пропустил заказ."""
         text = format_card(order, result, response, self.is_prompt)
-        ok_any = False
-        for chat_id in self.chat_ids:
-            if self._send_one(chat_id, text):
-                ok_any = True
-        return ok_any
+        if not self.chat_ids:
+            return False
+        return all(self._send_one(cid, text) for cid in self.chat_ids)
 
     def send_text(self, text: str, chat_ids: list[str] | None = None) -> bool:
         """Отправить произвольное сообщение (heartbeat и т.п.)."""

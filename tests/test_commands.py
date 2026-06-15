@@ -56,3 +56,50 @@ def test_process_updates_stop(tmp_path, monkeypatch):
     # подписался ключом, затем отписался /stop
     assert not db.is_subscriber("555")
     db.close()
+
+
+def _two_updates():
+    return [
+        {"update_id": 5, "message": {"chat": {"id": 111, "username": "a"}, "text": "/start"}},
+        {"update_id": 6, "message": {"chat": {"id": 222, "username": "b"}, "text": "KEY"}},
+    ]
+
+
+def test_offset_stops_on_transient_send_failure(tmp_path, monkeypatch):
+    def fake_api(token, method, **params):
+        if method == "getUpdates":
+            return {"ok": True, "result": _two_updates()}
+        if str(params.get("chat_id")) == "111":
+            return {"ok": True}                  # ответ на /start прошёл
+        return {"ok": False, "error_code": 500}  # ответ на ключ — временный сбой
+
+    monkeypatch.setattr(commands, "_api", fake_api)
+    db = Storage(tmp_path / "c.db")
+    commands.process_updates("T", db, "KEY", "999", interval_minutes=15)
+    # offset продвинут только за /start (5->6), но НЕ за неотвеченный ключ
+    assert db.get_meta("tg_offset") == "6"
+    assert not db.is_subscriber("222")           # не регистрируем без подтверждения
+    db.close()
+
+
+def test_permanent_send_error_does_not_block_queue(tmp_path, monkeypatch):
+    def fake_api(token, method, **params):
+        if method == "getUpdates":
+            return {"ok": True, "result": _two_updates()}
+        return {"ok": False, "error_code": 403}  # бот заблокирован — постоянная ошибка
+
+    monkeypatch.setattr(commands, "_api", fake_api)
+    db = Storage(tmp_path / "c.db")
+    commands.process_updates("T", db, "KEY", "999", interval_minutes=15)
+    assert db.get_meta("tg_offset") == "7"       # постоянная ошибка не застревает навсегда
+    db.close()
+
+
+def test_getupdates_409_does_not_advance_offset(tmp_path, monkeypatch):
+    monkeypatch.setattr(commands, "_api",
+                        lambda t, m, **p: {"ok": False, "error_code": 409})
+    db = Storage(tmp_path / "c.db")
+    db.set_meta("tg_offset", "100")
+    commands.process_updates("T", db, "KEY", "999")
+    assert db.get_meta("tg_offset") == "100"     # 409 не трогает offset
+    db.close()
