@@ -15,6 +15,7 @@ def make_responder() -> Responder:
             "webapp": "Делаю веб-приложения.",
             "bot": "Делаю Telegram-ботов.",
             "automation": "Делаю парсеры и автоматизацию.",
+            "gamedev": "Делаю игры на Unity (C#).",
             "generic": "Веб-разработка.",
         },
     )
@@ -50,6 +51,11 @@ def test_detect_category_automation():
     r = make_responder()
     assert r.detect_category(order("Нужен парсер сайта с выгрузкой в Excel")) == "automation"
     assert r.detect_category(order("Автоматизация: скрипт на Python")) == "automation"
+
+
+def test_detect_category_gamedev():
+    r = make_responder()
+    assert r.detect_category(order("Нужен разработчик на Unity для мобильной игры")) == "gamedev"
 
 
 def test_detect_category_generic():

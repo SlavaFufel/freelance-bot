@@ -37,11 +37,13 @@ class Secrets:
     hh_user_agent: str = "FreelanceBot/1.0"
     telegram_api_id: str | None = None
     telegram_api_hash: str | None = None
+    access_key: str = ""
 
 
 @dataclass
 class Config:
     poll_interval_sec: int = 300
+    multi_user: bool = False
     enabled_sources: list[str] = field(default_factory=list)
     sources: dict = field(default_factory=dict)
     match: MatchConfig = field(default_factory=MatchConfig)
@@ -85,6 +87,7 @@ def load_config(path: str | Path | None = None) -> Config:
         hh_user_agent=os.getenv("HH_USER_AGENT", "FreelanceBot/1.0").strip(),
         telegram_api_id=(os.getenv("TELEGRAM_API_ID") or None),
         telegram_api_hash=(os.getenv("TELEGRAM_API_HASH") or None),
+        access_key=os.getenv("ACCESS_KEY", "").strip(),
     )
 
     # Источники можно переопределить переменной окружения (удобно для хостинга:
@@ -97,6 +100,7 @@ def load_config(path: str | Path | None = None) -> Config:
 
     return Config(
         poll_interval_sec=int(data.get("poll_interval_sec", 300)),
+        multi_user=bool(data.get("multi_user", False)),
         enabled_sources=enabled,
         sources=dict(data.get("sources", {}) or {}),
         match=match,

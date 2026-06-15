@@ -13,6 +13,8 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 # Категория -> подстроки-маркеры в нормализованном тексте. Порядок важен:
 # проверяем сверху вниз, берём первую сработавшую.
 CATEGORY_MARKERS: list[tuple[str, list[str]]] = [
+    ("gamedev", ["unity", "юнити", "unity3d", "gamedev", "геймдев",
+                 "разработка игр", "игровой движок", "unreal", "игровую механик"]),
     ("bot", ["телеграм-бот", "телеграм бот", "телеграмм бот", "telegram бот",
              "tg бот", "чат-бот", "чатбот", "aiogram", "discord", "дискорд",
              "бот для", "бота для", "напис бот", "сдела бот"]),
@@ -36,6 +38,7 @@ TECH_TERMS = [
     "node", "html", "css", "javascript", "typescript", "python",
     "адаптив", "figma", "фигма", "seo", "aiogram", "telethon", "selenium",
     "playwright", "scrapy", "api", "postgresql", "docker",
+    "unity", "юнити", "unity3d", "unreal", "gamedev",
 ]
 
 

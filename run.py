@@ -30,15 +30,28 @@ def build_pipeline(cfg, dry_run: bool) -> Pipeline:
 
     matcher = Matcher(cfg.match)
     responder = Responder(cfg.responder)
+    storage = Storage(ROOT / "freelance_bot.db")
 
     if dry_run:
         notifier = ConsoleNotifier()
-    else:
-        notifier = TelegramNotifier(
-            cfg.secrets.telegram_bot_token, cfg.secrets.telegram_chat_id
-        )
+        return Pipeline(sources, matcher, responder, notifier, storage)
 
-    storage = Storage(ROOT / "freelance_bot.db")
+    token = cfg.secrets.telegram_bot_token
+    owner = cfg.secrets.telegram_chat_id
+
+    if cfg.multi_user and cfg.secrets.access_key:
+        # обрабатываем входящие сообщения (/start, ключ доступа) и собираем подписчиков
+        from bot.commands import process_updates
+
+        process_updates(token, storage, cfg.secrets.access_key, owner)
+        recipients = storage.active_subscribers()
+        logging.info("Многопользовательский режим: получателей %d", len(recipients))
+    else:
+        if cfg.multi_user and not cfg.secrets.access_key:
+            logging.warning("multi_user включён, но ACCESS_KEY не задан — шлю только владельцу")
+        recipients = [owner] if owner else []
+
+    notifier = TelegramNotifier(token, recipients)
     return Pipeline(sources, matcher, responder, notifier, storage)
 
 

@@ -30,6 +30,63 @@ class Storage:
             )
             """
         )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS subscribers (
+                chat_id   TEXT PRIMARY KEY,
+                username  TEXT,
+                joined_at TEXT NOT NULL,
+                active    INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
+        )
+        self.conn.commit()
+
+    # --- подписчики (многопользовательский режим) ---
+    def add_subscriber(self, chat_id: str, username: str | None) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO subscribers (chat_id, username, joined_at, active)
+            VALUES (?, ?, ?, 1)
+            ON CONFLICT(chat_id) DO UPDATE SET active = 1, username = excluded.username
+            """,
+            (str(chat_id), username, datetime.now(timezone.utc).isoformat()),
+        )
+        self.conn.commit()
+
+    def deactivate_subscriber(self, chat_id: str) -> None:
+        self.conn.execute(
+            "UPDATE subscribers SET active = 0 WHERE chat_id = ?", (str(chat_id),)
+        )
+        self.conn.commit()
+
+    def is_subscriber(self, chat_id: str) -> bool:
+        cur = self.conn.execute(
+            "SELECT 1 FROM subscribers WHERE chat_id = ? AND active = 1", (str(chat_id),)
+        )
+        return cur.fetchone() is not None
+
+    def active_subscribers(self) -> list[str]:
+        cur = self.conn.execute(
+            "SELECT chat_id FROM subscribers WHERE active = 1 ORDER BY joined_at"
+        )
+        return [row["chat_id"] for row in cur.fetchall()]
+
+    # --- произвольные пары ключ/значение (offset getUpdates и т.п.) ---
+    def get_meta(self, key: str, default: str | None = None) -> str | None:
+        cur = self.conn.execute("SELECT value FROM meta WHERE key = ?", (key,))
+        row = cur.fetchone()
+        return row["value"] if row else default
+
+    def set_meta(self, key: str, value: str) -> None:
+        self.conn.execute(
+            "INSERT INTO meta (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, str(value)),
+        )
         self.conn.commit()
 
     def is_seen(self, source: str, external_id: str) -> bool:

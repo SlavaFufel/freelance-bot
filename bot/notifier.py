@@ -41,22 +41,24 @@ def format_card(order: Order, result: MatchResult, response: str) -> str:
 
 
 class TelegramNotifier:
-    def __init__(self, token: str, chat_id: str):
-        if not token or not chat_id:
+    def __init__(self, token: str, chat_ids: str | list[str]):
+        if isinstance(chat_ids, str):
+            chat_ids = [chat_ids]
+        chat_ids = [str(c) for c in chat_ids if c]
+        if not token or not chat_ids:
             raise ValueError(
-                "Не заданы TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID в .env"
+                "Не задан TELEGRAM_BOT_TOKEN или нет получателей (chat_id/подписчиков)"
             )
         self.token = token
-        self.chat_id = chat_id
+        self.chat_ids = chat_ids
         self.api = f"https://api.telegram.org/bot{token}/sendMessage"
 
-    def send(self, order: Order, result: MatchResult, response: str) -> bool:
-        text = format_card(order, result, response)
+    def _send_one(self, chat_id: str, text: str) -> bool:
         try:
             resp = httpx.post(
                 self.api,
                 data={
-                    "chat_id": self.chat_id,
+                    "chat_id": chat_id,
                     "text": text,
                     "parse_mode": "HTML",
                     "disable_web_page_preview": "false",
@@ -65,11 +67,20 @@ class TelegramNotifier:
             )
             if resp.status_code == 200 and resp.json().get("ok"):
                 return True
-            log.error("Telegram sendMessage failed: %s %s", resp.status_code, resp.text)
+            log.error("Telegram sendMessage %s failed: %s %s", chat_id, resp.status_code, resp.text)
             return False
         except Exception as exc:  # noqa: BLE001
-            log.error("Telegram sendMessage error: %s", exc)
+            log.error("Telegram sendMessage %s error: %s", chat_id, exc)
             return False
+
+    def send(self, order: Order, result: MatchResult, response: str) -> bool:
+        """Отправить карточку всем получателям. True, если дошло хотя бы одному."""
+        text = format_card(order, result, response)
+        ok_any = False
+        for chat_id in self.chat_ids:
+            if self._send_one(chat_id, text):
+                ok_any = True
+        return ok_any
 
 
 class ConsoleNotifier:

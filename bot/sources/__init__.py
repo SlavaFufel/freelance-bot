@@ -42,6 +42,14 @@ def _build_one(name: str, cfg: Config) -> Source | None:
         from .kadrof import KadrofSource
 
         return KadrofSource(sc)
+    if name == "fl_ru":
+        from .fl_ru import FlRuSource
+
+        return FlRuSource(sc)
+    if name == "youdo":
+        from .youdo import YoudoSource
+
+        return YoudoSource(sc)
     if name == "kwork":
         from .kwork import KworkSource
 

@@ -1,0 +1,99 @@
+"""Обработка входящих сообщений бота: /start и доступ по ключу.
+
+Работает в cron-модели (каждый прогон): читаем новые сообщения через getUpdates,
+регистрируем подписчиков, отвечаем. Ответ приходит на следующем прогоне — задержка
+до интервала опроса (это нормально для GitHub Actions).
+"""
+from __future__ import annotations
+
+import logging
+
+import httpx
+
+from .storage import Storage
+
+log = logging.getLogger(__name__)
+
+OFFSET_KEY = "tg_offset"
+
+
+def _api(token: str, method: str, **params) -> dict:
+    r = httpx.post(f"https://api.telegram.org/bot{token}/{method}", data=params, timeout=30)
+    return r.json()
+
+
+def _send(token: str, chat_id: str, text: str) -> None:
+    try:
+        _api(token, "sendMessage", chat_id=chat_id, text=text)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("sendMessage %s failed: %s", chat_id, exc)
+
+
+WELCOME = (
+    "Привет! Я присылаю свежие фриланс-заказы (сайты, боты, парсеры, Unity и т.п.).\n"
+    "Чтобы получить доступ, отправь мне ключ доступа, который дал владелец бота."
+)
+ACCESS_OK = (
+    "✅ Доступ открыт! Теперь буду присылать тебе подходящие заказы по мере появления."
+)
+ACCESS_HINT = "Не узнаю это сообщение. Отправь ключ доступа от владельца бота."
+STOPPED = "Окей, больше не буду присылать заказы. Напиши ключ снова, чтобы вернуться."
+
+
+def process_updates(
+    token: str, storage: Storage, access_key: str, owner_chat_id: str | None
+) -> int:
+    """Обработать новые сообщения. Возвращает число новых подписчиков."""
+    # владелец всегда подписан
+    if owner_chat_id:
+        storage.add_subscriber(owner_chat_id, "owner")
+
+    offset = int(storage.get_meta(OFFSET_KEY, "0") or "0")
+    try:
+        resp = _api(token, "getUpdates", offset=offset, timeout=0,
+                    allowed_updates='["message"]')
+    except Exception as exc:  # noqa: BLE001
+        log.warning("getUpdates failed: %s", exc)
+        return 0
+
+    if not resp.get("ok"):
+        log.warning("getUpdates not ok: %s", resp)
+        return 0
+
+    new_subs = 0
+    max_update_id = offset
+    for upd in resp.get("result", []):
+        max_update_id = max(max_update_id, upd.get("update_id", 0))
+        msg = upd.get("message") or {}
+        chat = msg.get("chat") or {}
+        cid = str(chat.get("id") or "")
+        if not cid:
+            continue
+        username = chat.get("username") or chat.get("first_name") or "?"
+        text = (msg.get("text") or "").strip()
+
+        if text == "/start":
+            if storage.is_subscriber(cid):
+                _send(token, cid, "Ты уже подписан — заказы будут приходить автоматически.")
+            else:
+                _send(token, cid, WELCOME)
+        elif text in ("/stop", "стоп"):
+            storage.deactivate_subscriber(cid)
+            _send(token, cid, STOPPED)
+        elif access_key and text == access_key:
+            already = storage.is_subscriber(cid)
+            storage.add_subscriber(cid, username)
+            _send(token, cid, ACCESS_OK)
+            if not already:
+                new_subs += 1
+                if owner_chat_id and cid != str(owner_chat_id):
+                    _send(token, owner_chat_id, f"👤 Новый пользователь: @{username} ({cid})")
+        else:
+            _send(token, cid, ACCESS_HINT)
+
+    if max_update_id >= offset:
+        storage.set_meta(OFFSET_KEY, str(max_update_id + 1))
+
+    if new_subs:
+        log.info("Новых подписчиков: %d", new_subs)
+    return new_subs

@@ -72,6 +72,24 @@ def test_bot_and_automation_keywords():
     assert not m.evaluate(order("Ищу работу удалённо")).passed
 
 
+def test_permanent_job_excluded():
+    m = make_matcher(
+        include_keywords=["сайт", "python", "unity"],
+        boost_keywords=[],
+        exclude_keywords=["senior", "в штат", "full-time", "оклад"],
+        min_score=1.0,
+    )
+    # вакансия на постоянную работу — режется
+    assert not m.evaluate(order("Senior Python разработчик в штат")).passed
+    # разовый заказ — проходит
+    assert m.evaluate(order("Нужно доработать сайт на Python")).passed
+
+
+def test_unity_included():
+    m = make_matcher(include_keywords=["unity", "юнити"], boost_keywords=["unity"], min_score=1.0)
+    assert m.evaluate(order("Нужен разработчик Unity на проект")).passed
+
+
 def test_substring_not_matched_inside_word():
     # "сайт" не должно ловиться в "дизайнсайтище"? проверим обратное: целое слово ок
     m = make_matcher(boost_keywords=[], include_keywords=["веб"], min_score=1.0)

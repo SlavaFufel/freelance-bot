@@ -29,7 +29,17 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt && pip install playwright
+
+      # Браузер для Playwright (нужен для kwork/weblancer). Кэшируем, чтобы не качать каждый раз.
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
 
       # Восстанавливаем БД дедупа из кэша (последнюю сохранённую).
       - name: Restore dedup DB
@@ -45,7 +55,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           HH_USER_AGENT: ${{ secrets.HH_USER_AGENT }}
-          # На заграничном IP GitHub hh не работает — оставляем источники,
-          # которые отдаются отовсюду. Меняй список под себя.
-          ENABLED_SOURCES: "telegram_channels,freelance_ru,kadrof"
+          ACCESS_KEY: ${{ secrets.ACCESS_KEY }}
+          # hh выключен (постоянная работа + блок по IP). fl_ru/youdo/profi не включаем
+          # в облако — у них анти-бот + блок заграничных IP, их лучше гонять локально.
+          ENABLED_SOURCES: "telegram_channels,freelance_ru,kadrof,kwork,weblancer"
         run: python run.py --once --log-level INFO
