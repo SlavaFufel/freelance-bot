@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import html
 import logging
 
 import httpx
@@ -24,24 +25,58 @@ def _api(token: str, method: str, **params) -> dict:
 
 def _send(token: str, chat_id: str, text: str) -> None:
     try:
-        _api(token, "sendMessage", chat_id=chat_id, text=text)
+        _api(token, "sendMessage", chat_id=chat_id, text=text,
+             parse_mode="HTML", disable_web_page_preview="true")
     except Exception as exc:  # noqa: BLE001
         log.warning("sendMessage %s failed: %s", chat_id, exc)
 
 
 WELCOME = (
-    "Привет! Я присылаю свежие фриланс-заказы (сайты, боты, парсеры, Unity и т.п.).\n"
-    "Чтобы получить доступ, отправь мне ключ доступа, который дал владелец бота."
+    "👋 <b>Привет!</b>\n\n"
+    "Я ищу свежие фриланс-заказы и присылаю их сюда: сайты, доработки, "
+    "Telegram-боты, парсеры, автоматизация, Unity.\n\n"
+    "🔑 Чтобы начать получать заказы, отправь мне <b>ключ доступа</b> "
+    "(его даёт владелец бота)."
 )
-ACCESS_OK = (
-    "✅ Доступ открыт! Теперь буду присылать тебе подходящие заказы по мере появления."
+
+
+def _access_ok(interval: int) -> str:
+    return (
+        "✅ <b>Доступ открыт!</b>\n\n"
+        "Теперь буду присылать тебе подходящие заказы.\n"
+        f"🔄 Проверяю новые примерно <b>раз в {interval} минут</b> — "
+        "первые карточки придут в ближайшее время.\n\n"
+        "📦 В каждой карточке: описание заказа, ссылка и готовый <b>промпт для Gemini</b> — "
+        "скопируй его, вставь в Gemini, и получишь готовый отклик под заказчика.\n\n"
+        "ℹ️ /stop — отписаться."
+    )
+
+
+def _already(interval: int) -> str:
+    return (
+        "✅ Ты уже подключён — заказы приходят автоматически "
+        f"(проверяю раз в ~{interval} минут).\n"
+        "ℹ️ /stop — отписаться."
+    )
+
+
+ACCESS_HINT = (
+    "🤔 Не узнаю это сообщение.\n"
+    "Отправь <b>ключ доступа</b>, который дал владелец бота. "
+    "Нет ключа — попроси у того, кто тебя пригласил."
 )
-ACCESS_HINT = "Не узнаю это сообщение. Отправь ключ доступа от владельца бота."
-STOPPED = "Окей, больше не буду присылать заказы. Напиши ключ снова, чтобы вернуться."
+STOPPED = (
+    "🛑 Окей, больше не присылаю заказы.\n"
+    "Чтобы вернуться — отправь ключ доступа снова."
+)
 
 
 def process_updates(
-    token: str, storage: Storage, access_key: str, owner_chat_id: str | None
+    token: str,
+    storage: Storage,
+    access_key: str,
+    owner_chat_id: str | None,
+    interval_minutes: int = 15,
 ) -> int:
     """Обработать новые сообщения. Возвращает число новых подписчиков."""
     # владелец всегда подписан
@@ -72,22 +107,20 @@ def process_updates(
         username = chat.get("username") or chat.get("first_name") or "?"
         text = (msg.get("text") or "").strip()
 
-        if text == "/start":
-            if storage.is_subscriber(cid):
-                _send(token, cid, "Ты уже подписан — заказы будут приходить автоматически.")
-            else:
-                _send(token, cid, WELCOME)
+        if text in ("/start", "/help"):
+            _send(token, cid, _already(interval_minutes) if storage.is_subscriber(cid) else WELCOME)
         elif text in ("/stop", "стоп"):
             storage.deactivate_subscriber(cid)
             _send(token, cid, STOPPED)
         elif access_key and text == access_key:
             already = storage.is_subscriber(cid)
             storage.add_subscriber(cid, username)
-            _send(token, cid, ACCESS_OK)
+            _send(token, cid, _access_ok(interval_minutes))
             if not already:
                 new_subs += 1
                 if owner_chat_id and cid != str(owner_chat_id):
-                    _send(token, owner_chat_id, f"👤 Новый пользователь: @{username} ({cid})")
+                    _send(token, owner_chat_id,
+                          f"👤 Новый пользователь: @{html.escape(username)} ({cid})")
         else:
             _send(token, cid, ACCESS_HINT)
 

@@ -43,7 +43,8 @@ def build_pipeline(cfg, dry_run: bool) -> Pipeline:
         # обрабатываем входящие сообщения (/start, ключ доступа) и собираем подписчиков
         from bot.commands import process_updates
 
-        process_updates(token, storage, cfg.secrets.access_key, owner)
+        process_updates(token, storage, cfg.secrets.access_key, owner,
+                        interval_minutes=cfg.update_interval_minutes)
         recipients = storage.active_subscribers()
         logging.info("Многопользовательский режим: получателей %d", len(recipients))
     else:

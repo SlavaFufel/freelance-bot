@@ -45,6 +45,7 @@ class Secrets:
 @dataclass
 class Config:
     poll_interval_sec: int = 300
+    update_interval_minutes: int = 15   # для текста сообщений бота (синхронь с cron в workflow)
     multi_user: bool = False
     enabled_sources: list[str] = field(default_factory=list)
     sources: dict = field(default_factory=dict)
@@ -104,6 +105,7 @@ def load_config(path: str | Path | None = None) -> Config:
 
     return Config(
         poll_interval_sec=int(data.get("poll_interval_sec", 300)),
+        update_interval_minutes=int(data.get("update_interval_minutes", 15)),
         multi_user=bool(data.get("multi_user", False)),
         enabled_sources=enabled,
         sources=dict(data.get("sources", {}) or {}),
