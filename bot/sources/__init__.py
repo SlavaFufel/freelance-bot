@@ -78,5 +78,21 @@ def _build_one(name: str, cfg: Config) -> Source | None:
         from .freelancer_com import FreelancerComSource
 
         return FreelancerComSource(sc)
+    if name == "remoteok":
+        from .remoteok import RemoteOkSource
+
+        return RemoteOkSource(sc)
+    if name == "weworkremotely":
+        from .weworkremotely import WeWorkRemotelySource
+
+        return WeWorkRemotelySource(sc)
+    if name == "guru":
+        from .guru import GuruSource
+
+        return GuruSource(sc)
+    if name == "peopleperhour":
+        from .peopleperhour import PeoplePerHourSource
+
+        return PeoplePerHourSource(sc)
 
     raise ValueError(f"неизвестный источник: {name}")

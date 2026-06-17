@@ -29,9 +29,13 @@ enabled_sources:
   - telegram_channels
   - freelance_ru
   - kadrof
-  - freelancehunt      # новая биржа — статический HTML, стабильно работает в облаке
-  - upwork             # RSS-лента заказов (англоязычные проекты)
-  - freelancer_com     # best-effort HTML, может блокироваться датацентром
+  - freelancehunt      # статический HTML, стабильно в облаке
+  - upwork             # RSS без авторизации
+  - remoteok           # JSON API без авторизации — самый надёжный зарубежный
+  - weworkremotely     # RSS-лента programming+devops вакансий
+  - guru               # HTML-листинг, умеренная защита
+  - freelancer_com     # best-effort HTML, может блокироваться
+  - peopleperhour      # best-effort HTML (UK биржа)
   - kwork
   - weblancer
   - fl_ru
@@ -114,6 +118,24 @@ sources:
   # Freelancer.com — best-effort HTML-парсинг. Может блокироваться датацентром.
   freelancer_com:
     url: "https://www.freelancer.com/jobs/"
+
+  # RemoteOK — публичный JSON API, работает со всех IP без капчи.
+  remoteok:
+    limit: 50   # сколько вакансий брать за раз
+
+  # We Work Remotely — RSS-ленты programming и devops.
+  weworkremotely:
+    feeds:
+      - "https://weworkremotely.com/categories/remote-programming-jobs.rss"
+      - "https://weworkremotely.com/categories/remote-devops-sysadmin-jobs.rss"
+
+  # Guru.com — листинг проектов, умеренная защита.
+  guru:
+    url: "https://www.guru.com/d/jobs/"
+
+  # PeoplePerHour — UK-биржа, best-effort HTML.
+  peopleperhour:
+    url: "https://www.peopleperhour.com/freelance-jobs"
 
   # Профи.ру / Яндекс Услуги — заказы под логином исполнителя (нужна сессия).
   profi: {}
@@ -209,6 +231,29 @@ match:
     - геймдев
     - разработка игр
     - игровой движок
+    # --- английские ключевые слова (для зарубежных бирж) ---
+    - web developer
+    - web development
+    - website
+    - landing page
+    - ecommerce
+    - e-commerce
+    - telegram bot
+    - discord bot
+    - chatbot
+    - scraping
+    - crawler
+    - automation
+    - developer
+    - programmer
+    - full stack
+    - fullstack
+    - backend
+    - frontend
+    - mobile app
+    - game developer
+    - unity developer
+    - c# developer
 
   # Повышенный вес (приоритет того, что нам выгоднее брать).
   boost_keywords:
