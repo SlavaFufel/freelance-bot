@@ -66,5 +66,17 @@ def _build_one(name: str, cfg: Config) -> Source | None:
         from .yandex_uslugi import YandexUslugiSource
 
         return YandexUslugiSource(sc)
+    if name == "freelancehunt":
+        from .freelancehunt import FreelancehuntSource
+
+        return FreelancehuntSource(sc)
+    if name == "upwork":
+        from .upwork import UpworkSource
+
+        return UpworkSource(sc)
+    if name == "freelancer_com":
+        from .freelancer_com import FreelancerComSource
+
+        return FreelancerComSource(sc)
 
     raise ValueError(f"неизвестный источник: {name}")

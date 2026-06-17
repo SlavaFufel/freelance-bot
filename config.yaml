@@ -21,12 +21,17 @@ heartbeat_interval_minutes: 60
 multi_user: true
 
 # Какие источники включены. Закомментируй ненужные.
-# Доступно: telegram_channels, freelance_ru, kadrof, kwork, weblancer, fl_ru, youdo, profi, yandex_uslugi, hh
+# Доступно: telegram_channels, freelance_ru, kadrof, kwork, weblancer, fl_ru, youdo,
+#           freelancehunt, upwork, freelancer_com, profi, yandex_uslugi, hh
 # hh выключен намеренно — там вакансии на ПОСТОЯННУЮ работу, а нам нужны разовые заказы.
+# weblancer/fl_ru/youdo — блокируют датацентровые IP (GitHub Actions), работают только локально с RU-IP.
 enabled_sources:
   - telegram_channels
   - freelance_ru
   - kadrof
+  - freelancehunt      # новая биржа — статический HTML, стабильно работает в облаке
+  - upwork             # RSS-лента заказов (англоязычные проекты)
+  - freelancer_com     # best-effort HTML, может блокироваться датацентром
   - kwork
   - weblancer
   - fl_ru
@@ -49,17 +54,22 @@ sources:
 
   telegram_channels:
     # Юзернеймы ПУБЛИЧНЫХ каналов без @ (читаются через t.me/s/<канал>).
-    # Все ниже проверены: публичные и отдают посты. Фильтр по заголовку
-    # (match.require_keyword_in_title) отсекает нерелевантное из общих каналов.
-    # ВНИМАНИЕ: оставлены ФРИЛАНС-каналы (разовые проекты). Каналы чистых вакансий
-    # на постоянную работу (jvmjobs/Getitrussia/over100/ru_pythonjobs) убраны —
-    # они дают наём в штат, а нам нужны разовые заказы. Захочешь — верни сам.
+    # Фильтр по заголовку (match.require_keyword_in_title) отсекает нерелевантные посты.
+    # exclude_keywords режет постоянную работу даже если она встречается в этих каналах.
     channels:
       - freelancetaverna     # Фриланс Таверна
       - freelance_vacancies  # Фриланс чат | вакансии
-      - naudalenkebro        # Удалёнка 2.0 / Finder.work
+      - naudalenkebro        # На удалёнке 2.0 / Finder.work
       - theyseeku            # Охотник за головами / Finder.work
       - workathomerus        # WorkAtHome
+      - jobs_code            # Jobs Code — IT-вакансии: программирование, боты, верстка
+      - jobGeeks             # Job Geeks — разработчики, QA, DevOps
+      - mobile_jobs          # Mobile Dev Jobs — мобильная разработка
+      - csharp_job           # C#/.NET вакансии и проекты
+      - GetIT_Russia         # GetIT Russia — крупное IT-сообщество (300к+)
+      - finder_vc            # Finder.vc — удалёнка и фриланс (300к+ подписчиков)
+      - distantsiya          # Дистанция — проверенные фриланс-проекты
+      - ipomogator           # Помогатор — заказчики и исполнители, много проектных задач
     limit_per_channel: 20
 
   # freelance.ru — живая биржа, парсится статикой (страница /task).
@@ -84,6 +94,26 @@ sources:
     url: "https://www.fl.ru/projects/"
   youdo:
     url: "https://youdo.com/tasks-internet-it"
+
+  # Freelancehunt — украинско-российская биржа, статический HTML, стабильно работает в облаке.
+  freelancehunt:
+    url: "https://freelancehunt.com/projects/"
+
+  # Upwork — английские проекты через RSS. Список поисковых запросов ниже.
+  upwork:
+    queries:
+      - "web developer"
+      - "python developer"
+      - "telegram bot"
+      - "react developer"
+      - "unity developer"
+      - "web scraping python"
+      - "automation script"
+      - "website development"
+
+  # Freelancer.com — best-effort HTML-парсинг. Может блокироваться датацентром.
+  freelancer_com:
+    url: "https://www.freelancer.com/jobs/"
 
   # Профи.ру / Яндекс Услуги — заказы под логином исполнителя (нужна сессия).
   profi: {}
